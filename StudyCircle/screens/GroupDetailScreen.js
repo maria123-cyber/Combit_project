@@ -1,6 +1,7 @@
+// GroupDetailScreen.js
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, Alert, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { View, Text, Button, Alert, FlatList, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
+import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 
 export default function GroupDetailScreen({ route, navigation }) {
@@ -8,58 +9,73 @@ export default function GroupDetailScreen({ route, navigation }) {
   const user = auth.currentUser;
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
-
-  const isMember = group?.members?.includes(user.email);
-  const isCreator = group?.creator === user.email;
-  const isRequested = group?.joinRequests?.includes(user.email);
+  const [isOwner, setIsOwner] = useState(false);
+  const [isMember, setIsMember] = useState(false);
+  const [isRequested, setIsRequested] = useState(false);
 
   useEffect(() => {
     const fetchGroup = async () => {
-      const docRef = doc(db, 'groups', groupId);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        setGroup({ id: docSnap.id, ...docSnap.data() });
+      try {
+        const docRef = doc(db, 'groups', groupId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const g = { id: docSnap.id, ...docSnap.data() };
+          setGroup(g);
+          setIsOwner(user && g.ownerId === user.uid);
+          setIsMember(user && g.members?.includes(user.email));
+          setIsRequested(user && g.joinRequests?.includes(user.email));
+        } else {
+          Alert.alert('Not found', 'Group not found');
+          navigation.goBack();
+        }
+      } catch (e) {
+        Alert.alert('Error', e.message);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
     fetchGroup();
   }, [groupId]);
 
+  const refresh = async () => {
+    setLoading(true);
+    const docRef = doc(db, 'groups', groupId);
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const g = { id: docSnap.id, ...docSnap.data() };
+      setGroup(g);
+      setIsOwner(user && g.ownerId === user.uid);
+      setIsMember(user && g.members?.includes(user.email));
+      setIsRequested(user && g.joinRequests?.includes(user.email));
+    }
+    setLoading(false);
+  };
+
   const handleJoin = async () => {
-    if (isMember) return Alert.alert('You are already a member.');
+    if (!group) return;
+    if (isMember) return Alert.alert('Info', 'You are already a member.');
+    if (group.members.length >= group.maxMembers) return Alert.alert('Full', 'Group is full.');
 
-    if (group.members.length >= group.maxMembers)
-      return Alert.alert('Group is full.');
-
-    if (group.private) {
-      if (isRequested) return Alert.alert('Join request already sent.');
-      try {
-        await updateDoc(doc(db, 'groups', groupId), {
-          joinRequests: arrayUnion(user.email),
-        });
-        Alert.alert('Join request sent! Wait for approval.');
-      } catch (e) {
-        Alert.alert('Error', e.message);
+    try {
+      if (group.private) {
+        if (isRequested) return Alert.alert('Info', 'Request already sent.');
+        await updateDoc(doc(db, 'groups', groupId), { joinRequests: arrayUnion(user.email) });
+        Alert.alert('Request sent', 'Wait for owner approval.');
+      } else {
+        await updateDoc(doc(db, 'groups', groupId), { members: arrayUnion(user.email) });
+        Alert.alert('Joined', 'You joined the group.');
       }
-    } else {
-      // Public group - join immediately
-      try {
-        await updateDoc(doc(db, 'groups', groupId), {
-          members: arrayUnion(user.email),
-        });
-        Alert.alert('You joined the group!');
-      } catch (e) {
-        Alert.alert('Error', e.message);
-      }
+      refresh();
+    } catch (e) {
+      Alert.alert('Error', e.message);
     }
   };
 
   const handleLeave = async () => {
+    if (!isMember) return;
     try {
-      await updateDoc(doc(db, 'groups', groupId), {
-        members: arrayRemove(user.email),
-      });
-      Alert.alert('You left the group');
+      await updateDoc(doc(db, 'groups', groupId), { members: arrayRemove(user.email) });
+      Alert.alert('Left', 'You left the group.');
       navigation.goBack();
     } catch (e) {
       Alert.alert('Error', e.message);
@@ -67,84 +83,114 @@ export default function GroupDetailScreen({ route, navigation }) {
   };
 
   const handleApprove = async (email) => {
-    if (!isCreator) return;
-
-    if (group.members.length >= group.maxMembers) {
-      return Alert.alert('Group is full. Cannot approve more members.');
-    }
-
+    if (!isOwner) return;
+    if (group.members.length >= group.maxMembers) return Alert.alert('Full', 'Group is full.');
     try {
       await updateDoc(doc(db, 'groups', groupId), {
         members: arrayUnion(email),
         joinRequests: arrayRemove(email),
       });
-      Alert.alert(`${email} approved!`);
-      setGroup(prev => ({
-        ...prev,
-        members: [...prev.members, email],
-        joinRequests: prev.joinRequests.filter(e => e !== email),
-      }));
+      Alert.alert('Approved', `${email} approved`);
+      refresh();
     } catch (e) {
       Alert.alert('Error', e.message);
     }
   };
 
   const handleReject = async (email) => {
-    if (!isCreator) return;
+    if (!isOwner) return;
     try {
-      await updateDoc(doc(db, 'groups', groupId), {
-        joinRequests: arrayRemove(email),
-      });
-      Alert.alert(`${email} rejected!`);
-      setGroup(prev => ({
-        ...prev,
-        joinRequests: prev.joinRequests.filter(e => e !== email),
-      }));
+      await updateDoc(doc(db, 'groups', groupId), { joinRequests: arrayRemove(email) });
+      Alert.alert('Rejected', `${email} rejected`);
+      refresh();
     } catch (e) {
       Alert.alert('Error', e.message);
     }
   };
 
+  const handleDelete = async () => {
+    if (!isOwner) return;
+    Alert.alert('Confirm', 'Delete this group?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => {
+        try {
+          await deleteDoc(doc(db, 'groups', groupId));
+          Alert.alert('Deleted', 'Group deleted');
+          navigation.goBack();
+        } catch (e) {
+          Alert.alert('Error', e.message);
+        }
+      } }
+    ]);
+  };
+
   if (loading) return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
 
   return (
-    <View style={{ flex: 1, padding: 20 }}>
-      <Text style={{ fontSize: 22, fontWeight: 'bold' }}>{group.name}</Text>
-      <Text>Department: {group.department}</Text>
-      <Text>Course: {group.course} ({group.courseCode})</Text>
-      <Text>Description: {group.description}</Text>
-      <Text>Study Topics: {group.studyTopics}</Text>
-      <Text>Schedule: {group.schedule}</Text>
-      <Text>Location: {group.location}</Text>
-      <Text>Members: {group.members.length} / {group.maxMembers}</Text>
-      <Text>Private Group: {group.private ? 'Yes' : 'No'}</Text>
+    <View style={{ flex: 1, padding: 20, backgroundColor: '#fff' }}>
+      <Text style={{ fontSize: 22, fontWeight: 'bold', marginBottom: 6 }}>{group.name}</Text>
+      <Text style={{ color: '#666', marginBottom: 10 }}>{group.department} • {group.course} ({group.courseCode})</Text>
+
+      <Text style={{ marginTop: 8, fontWeight: '600' }}>Description</Text>
+      <Text style={{ marginBottom: 8 }}>{group.description || 'No description'}</Text>
+
+      <Text style={{ fontWeight: '600' }}>Topics</Text>
+      <Text style={{ marginBottom: 8 }}>{group.studyTopics || '-'}</Text>
+
+      <Text>Schedule: {group.schedule || '-'}</Text>
+      <Text>Location: {group.location || '-'}</Text>
+      <Text style={{ marginBottom: 8 }}>Members: {group.members?.length || 0} / {group.maxMembers}</Text>
 
       {isMember ? (
-        <Button title="Leave Group" onPress={handleLeave} color="red" />
+        <Button title="Leave Group" color="red" onPress={handleLeave} />
       ) : (
         <Button title={group.private ? (isRequested ? 'Request Sent' : 'Request to Join') : 'Join Group'} onPress={handleJoin} />
       )}
 
-      {isCreator && group.joinRequests.length > 0 && (
+      <View style={{ height: 12 }} />
+
+      <Button title="View Study Sessions" onPress={() => navigation.navigate('GroupSessions', { groupId })} />
+
+      {isOwner && (
         <>
-          <Text style={{ marginTop: 20, fontWeight: 'bold' }}>Join Requests:</Text>
+          <View style={{ height: 12 }} />
+          <Button title="Edit Group" onPress={() => navigation.navigate('EditGroup', { groupId })} />
+          <View style={{ height: 10 }} />
+          <Button title="Delete Group" color="red" onPress={handleDelete} />
+        </>
+      )}
+
+      {/* Join requests list */}
+      {isOwner && group.joinRequests?.length > 0 && (
+        <>
+          <Text style={{ marginTop: 18, fontWeight: '700' }}>Join Requests</Text>
           <FlatList
             data={group.joinRequests}
-            keyExtractor={item => item}
+            keyExtractor={(item) => item}
             renderItem={({ item }) => (
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginVertical: 5 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 }}>
                 <Text>{item}</Text>
                 <View style={{ flexDirection: 'row' }}>
-                  <Button title="Approve" onPress={() => handleApprove(item)} />
-                  <Button title="Reject" onPress={() => handleReject(item)} color="red" />
+                  <TouchableOpacity onPress={() => handleApprove(item)} style={styles.smallBtn}><Text style={{color:'#fff'}}>Approve</Text></TouchableOpacity>
+                  <View style={{ width: 8 }} />
+                  <TouchableOpacity onPress={() => handleReject(item)} style={[styles.smallBtn, { backgroundColor: '#e74c3c' }]}><Text style={{color:'#fff'}}>Reject</Text></TouchableOpacity>
                 </View>
               </View>
             )}
           />
         </>
       )}
-
-      <Button title="View Study Sessions" onPress={() => navigation.navigate('GroupSessions', { groupId })} />
     </View>
   );
 }
+
+const styles = {
+  smallBtn: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    backgroundColor: '#27ae60',
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center'
+  }
+};

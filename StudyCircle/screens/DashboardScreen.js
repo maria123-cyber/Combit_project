@@ -1,85 +1,157 @@
+// screens/DashboardScreen.js
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Button, ActivityIndicator, TouchableOpacity } from 'react-native';
-import { db, auth } from '../firebase';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { auth, db } from '../firebase';
+import { doc, getDoc } from 'firebase/firestore';
 
-export default function DashboardScreen({ navigation }) {
-  const user = auth.currentUser;
-  const [userProfile, setUserProfile] = useState(null);
-  const [groups, setGroups] = useState([]);
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function DashboardScreen() {
+  const navigation = useNavigation();
+  const [userName, setUserName] = useState('');
 
+  // Fetch user name from Firestore
   useEffect(() => {
-    const loadDashboardData = async () => {
+    const fetchUserData = async () => {
       try {
-        // Load user profile
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        setUserProfile(userDoc.exists() ? userDoc.data() : null);
-
-        // Load groups where user is member
-        const groupsSnapshot = await getDocs(collection(db, 'groups'));
-        const joinedGroups = groupsSnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(g => g.members.includes(user.email));
-        setGroups(joinedGroups);
-
-        // Load upcoming sessions for this week (filter could be improved with date comparison)
-        const sessionsSnapshot = await getDocs(collection(db, 'sessions'));
-        const userSessions = sessionsSnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(s => joinedGroups.some(g => g.id === s.groupId));
-        setSessions(userSessions);
-      } catch (error) {
-        console.log('Error loading dashboard:', error);
-      } finally {
-        setLoading(false);
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) {
+          setUserName(userDoc.data().name);
+        } else {
+          setUserName(auth.currentUser.email.split('@')[0]);
+        }
+      } catch (e) {
+        console.log('Error fetching user data:', e);
       }
     };
-    loadDashboardData();
-  }, [user]);
-
-  if (loading) return <ActivityIndicator size="large" style={{ marginTop: 50 }} />;
+    fetchUserData();
+  }, []);
 
   return (
-    <View style={{ flex: 1, padding: 20 }}>
-      <Text style={{ fontSize: 24, marginBottom: 10 }}>Welcome, {userProfile?.name || 'Student'}</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      {/* Header Section */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>Hi, {userName} 👋</Text>
+          <Text style={styles.subtitle}>Welcome to StudyCircle</Text>
+        </View>
 
-      <Button title="Your Profile" onPress={() => navigation.navigate('Profile')} />
+        <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen')}>
+          <Image
+            source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }}
+            style={styles.profileImage}
+          />
+        </TouchableOpacity>
+      </View>
 
-      <Text style={{ fontSize: 20, marginTop: 20 }}>Active Study Groups</Text>
-      {groups.length === 0 ? (
-        <Text>You have not joined any groups yet.</Text>
-      ) : (
-        <FlatList
-          data={groups}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity onPress={() => navigation.navigate('GroupDetail', { groupId: item.id })}>
-              <Text style={{ fontSize: 18, paddingVertical: 5 }}>{item.name}</Text>
-            </TouchableOpacity>
-          )}
-        />
-      )}
+      {/* Dashboard Cards */}
+      <View style={styles.section}>
+        {/* Create / Manage Groups */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('GroupCreateScreen')}
+        >
+          <Image
+            source={{ uri: 'https://cdn-icons-png.flaticon.com/512/4213/4213179.png' }}
+            style={styles.icon}
+          />
+          <Text style={styles.cardText}>Create / Manage Groups</Text>
+        </TouchableOpacity>
 
-      <Text style={{ fontSize: 20, marginTop: 20 }}>Upcoming Study Sessions (This Week)</Text>
-      {sessions.length === 0 ? (
-        <Text>No upcoming sessions.</Text>
-      ) : (
-        <FlatList
-          data={sessions}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <View style={{ paddingVertical: 5 }}>
-              <Text style={{ fontWeight: 'bold' }}>{item.title}</Text>
-              <Text>{item.date} {item.time}</Text>
-              <Text>Topic: {item.topic}</Text>
-            </View>
-          )}
-        />
-      )}
+        {/* Browse / Join Groups */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('GroupsListScreen')}
+        >
+          <Image
+            source={{ uri: 'https://cdn-icons-png.flaticon.com/512/6391/6391844.png' }}
+            style={styles.icon}
+          />
+          <Text style={styles.cardText}>Browse / Join Groups</Text>
+        </TouchableOpacity>
 
-      <Button title="Browse Study Groups" onPress={() => navigation.navigate('GroupsList')} style={{ marginTop: 20 }} />
-    </View>
+        {/* Study Sessions */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('GroupSessionsScreen')}
+        >
+          <Image
+            source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991108.png' }}
+            style={styles.icon}
+          />
+          <Text style={styles.cardText}>Study Sessions</Text>
+        </TouchableOpacity>
+
+        {/* Profile */}
+        <TouchableOpacity
+          style={styles.card}
+          onPress={() => navigation.navigate('ProfileScreen')}
+        >
+          <Image
+            source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2922/2922506.png' }}
+            style={styles.icon}
+          />
+          <Text style={styles.cardText}>View / Edit Profile</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flexGrow: 1,
+    backgroundColor: '#f7f9fc',
+    padding: 20,
+    alignItems: 'center',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  greeting: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1a73e8',
+  },
+  subtitle: {
+    fontSize: 15,
+    color: '#666',
+    marginTop: 2,
+  },
+  profileImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    borderWidth: 2,
+    borderColor: '#1a73e8',
+  },
+  section: {
+    width: '100%',
+  },
+  card: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a73e8',
+    borderRadius: 15,
+    paddingVertical: 18,
+    paddingHorizontal: 15,
+    marginVertical: 10,
+    shadowColor: '#000',
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 4,
+  },
+  icon: {
+    width: 40,
+    height: 40,
+    marginRight: 15,
+  },
+  cardText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+  },
+});
