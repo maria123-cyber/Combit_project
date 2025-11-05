@@ -9,41 +9,34 @@ export default function LoginScreen({ navigation }) {
 
   const handleLogin = async () => {
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      Alert.alert('Success', `Welcome back ${user.email}!`);
-      console.log('User logged in:', user);
-      // After login, navigate to main screen
-      navigation.navigate('Main');
+      await signInWithEmailAndPassword(auth, email, password);
+      navigation.replace('Main'); // navigate to main app after login
     } catch (error) {
-      Alert.alert('Error', error.message);
-      console.log('Login Error:', error.message);
+      Alert.alert('Login failed', error.message);
     }
   };
 
   return (
     <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
       <Text style={{ fontSize: 24, textAlign: 'center', marginBottom: 20 }}>Login</Text>
-
       <TextInput
         placeholder="Email"
+        keyboardType="email-address"
+        autoCapitalize="none"
         value={email}
         onChangeText={setEmail}
         style={{ borderWidth: 1, padding: 10, marginBottom: 10 }}
       />
-
       <TextInput
         placeholder="Password"
+        secureTextEntry
         value={password}
         onChangeText={setPassword}
-        secureTextEntry
         style={{ borderWidth: 1, padding: 10, marginBottom: 10 }}
       />
-
       <Button title="Login" onPress={handleLogin} />
-
       <Text
-        style={{ color: 'blue', textAlign: 'center', marginTop: 15 }}
+        style={{ textAlign: 'center', marginTop: 15, color: 'blue' }}
         onPress={() => navigation.navigate('Register')}
       >
         Don't have an account? Register

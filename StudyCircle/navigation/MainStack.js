@@ -1,20 +1,44 @@
 import React from 'react';
-import { View, Text, Button } from 'react-native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { signOut } from 'firebase/auth';
 import { auth } from '../firebase';
+import { Button } from 'react-native';
+
+// Screens
+import DashboardScreen from '../screens/DashboardScreen';
+import GroupsListScreen from '../screens/GroupsListScreen';
+import GroupCreateScreen from '../screens/GroupCreateScreen';
+import GroupDetailScreen from '../screens/GroupDetailScreen';
+import ProfileScreen from '../screens/ProfileScreen';
+import GroupSessionsScreen from '../screens/GroupSessionsScreen';
+
+const Stack = createNativeStackNavigator();
 
 export default function MainStack({ navigation }) {
   const handleLogout = async () => {
-    await signOut(auth);
-    navigation.navigate('Login');
+    try {
+      await signOut(auth);
+      navigation.navigate('Login');
+    } catch (error) {
+      console.log('Logout error:', error);
+    }
   };
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text style={{ fontSize: 20, marginBottom: 20 }}>
-        Welcome! You are logged in 🎉
-      </Text>
-      <Button title="Logout" onPress={handleLogout} />
-    </View>
+    <Stack.Navigator initialRouteName="Dashboard">
+      <Stack.Screen
+        name="Dashboard"
+        component={DashboardScreen}
+        options={{
+          title: 'Study Circle Dashboard',
+          headerRight: () => <Button title="Logout" onPress={handleLogout} />,
+        }}
+      />
+      <Stack.Screen name="GroupsList" component={GroupsListScreen} options={{ title: 'Study Groups' }} />
+      <Stack.Screen name="CreateGroup" component={GroupCreateScreen} options={{ title: 'Create Group' }} />
+      <Stack.Screen name="GroupDetail" component={GroupDetailScreen} options={{ title: 'Group Detail' }} />
+      <Stack.Screen name="Profile" component={ProfileScreen} options={{ title: 'Your Profile' }} />
+      <Stack.Screen name="GroupSessions" component={GroupSessionsScreen} options={{ title: 'Study Sessions' }} />
+    </Stack.Navigator>
   );
 }
