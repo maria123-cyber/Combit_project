@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, Button, Alert } from 'react-native';
+import { View, Text, TextInput, Button} from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase';
 
@@ -12,7 +12,7 @@ export default function LoginScreen({ navigation }) {
       await signInWithEmailAndPassword(auth, email, password);
       navigation.replace('Main'); // navigate to main app after login
     } catch (error) {
-      Alert.alert('Login failed', error.message);
+      alert('Login failed', error.message);
     }
   };
 
